@@ -63,15 +63,15 @@ const VideoContainer = ({
         </div>
       )}
 
-      {/* Video container */}
-     <div
-  ref={containerRef}
-  className="w-full rounded-xl overflow-hidden bg-gray-900 border-2 border-gray-200 shadow-inner"
-  style={{ 
-    height: '100dvh',  // ← dynamic viewport height, adjusts for keyboard
-    maxHeight: 'calc(100dvh - 280px)'
-  }}
-/>
+      {/* Video container - keyboard aware height */}
+      <div
+        ref={containerRef}
+        className="w-full rounded-xl overflow-hidden bg-gray-900 border-2 border-gray-200 shadow-inner"
+        style={{
+          height: 'calc(100dvh - 280px)',
+          minHeight: '300px',
+        }}
+      />
 
       {zegoLoading && (
         <div className="mt-4 text-center">
