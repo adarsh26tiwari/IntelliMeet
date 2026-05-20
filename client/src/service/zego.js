@@ -39,8 +39,6 @@ export const generateKitToken = (roomId,userId,userName) => {
 }
 
 
-//Request  brower permission for camera and mixrophone
-
 const requestMediaPermission = async () => {
     try {
          const stream = await navigator.mediaDevices.getUserMedia({
@@ -60,18 +58,15 @@ export const joinRoom = async(roomId,userId,userName,container,onJoinCallback,on
         throw new Error('Container element is required')
     }
 
-
     if(!ZEGO_CONFIG.APP_ID){
         throw new Error('Zegocloud App Id is not configured')
     }
 
-    //clean up exiting instance if any 
     if(zegoInstance && !isDestroying){
         try {
              isDestroying= true;
              const instance = zegoInstance;
              zegoInstance= null;
-
 
              if(instance && typeof instance.destroy === 'function'){
                 instance.destroy();
@@ -85,17 +80,15 @@ export const joinRoom = async(roomId,userId,userName,container,onJoinCallback,on
         }
     }
 
-
     let hasPermission = false;
     try {
         hasPermission = await requestMediaPermission();
         if(!hasPermission){
-            console.warn('Medai permission not granted upfront, SDK will request them')
+            console.warn('Media permission not granted upfront, SDK will request them')
         }
     } catch (error) {
-        console.warn('cound not pre-request permission ,SDK will handle it', error)
+        console.warn('Could not pre-request permission, SDK will handle it', error)
     }
-
 
     let kitToken;
     try {
@@ -105,10 +98,9 @@ export const joinRoom = async(roomId,userId,userName,container,onJoinCallback,on
         }
     } catch (error) {
         console.error('token generation error',error);
-        throw new Error(`faild to generate zego token: ${error.message}`)
+        throw new Error(`failed to generate zego token: ${error.message}`)
     }
 
-    //Create a ZEGO UIkIT instance
     let zp;
     try {
          zp = ZegoUIKitPrebuilt.create(kitToken);
@@ -116,27 +108,26 @@ export const joinRoom = async(roomId,userId,userName,container,onJoinCallback,on
             throw new Error('failed to create zego Uikit instance')
          }
     } catch (error) {
-           console.error('ZEGO instance creation error',error);
-        throw new Error(`faild to create Zego instace: ${error.message}`)
+        console.error('ZEGO instance creation error',error);
+        throw new Error(`failed to create Zego instance: ${error.message}`)
     }
 
-    //small delay
     await new Promise(resolve => setTimeout(resolve,100))
 
-    //join room with prebuild ui 
     try {
         zp.joinRoom({
-            container:container,
-            scenario:{
-                mode:ZegoUIKitPrebuilt.GroupCall,
+            container: container,
+            scenario: {
+                mode: ZegoUIKitPrebuilt.GroupCall,
             },
-            turnOnCameraWhenJoining:hasPermission,
-            turnOnMicrophoneWhenJoining:hasPermission,
-            showMyCameraToggleButton:true,
-            showMyMicrophoneToggleButton:true,
-            showAudioVideoSettingsButton:true,
-            showTextChat:true,
-            showUserList:true,
+            turnOnCameraWhenJoining: hasPermission,
+            turnOnMicrophoneWhenJoining: hasPermission,
+            showMyCameraToggleButton: true,
+            showMyMicrophoneToggleButton: true,
+            showAudioVideoSettingsButton: true,
+            showTextChat: true,
+            showUserList: true,
+            showLeaveRoomConfirmDialog: false, // ← fix for mobile
             onJoinRoom: () => {
                 userHasJoined = true;
                 if(onJoinCallback && typeof onJoinCallback === 'function'){
@@ -144,8 +135,8 @@ export const joinRoom = async(roomId,userId,userName,container,onJoinCallback,on
                 }
             },
             onLeaveRoom: () => {
-                userHasJoined= false;
-                   if(onLeaveCallback && typeof onLeaveCallback === 'function'){
+                userHasJoined = false;
+                if(onLeaveCallback && typeof onLeaveCallback === 'function'){
                     onLeaveCallback();
                 }
             },
@@ -160,14 +151,14 @@ export const joinRoom = async(roomId,userId,userName,container,onJoinCallback,on
                 isDestroying = false;
                 zp.destroy();
             } catch (error) {
-                console.error('Error destring zego instance',error)
+                console.error('Error destroying zego instance',error)
             }finally{
                 isDestroying=false;
             }
         }
         zegoInstance = null;
         userHasJoined=false;
-        throw new Error(`Failed tp join room ${error.message}`)
+        throw new Error(`Failed to join room ${error.message}`)
     }
     zegoInstance= zp;
     return zp;
@@ -180,15 +171,13 @@ export const leaveRoom = (onLeaveCallback) => {
         if(onLeaveCallback && typeof onLeaveCallback === 'function'){
             onLeaveCallback();
         }
-            return;
+        return;
     }
-
 
     isDestroying= true;
     const instance = zegoInstance;
     zegoInstance= null;
     userHasJoined= false;
-
 
     if(onLeaveCallback && typeof onLeaveCallback === 'function'){
         try {
