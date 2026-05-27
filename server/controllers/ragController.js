@@ -1,5 +1,6 @@
 import Document from '../model/Document.js';
 import Session from '../model/Session.js';
+import cloudinary from '../config/cloudinary.js';
 import {
   processAndStoreDocument,
   searchDocuments,
@@ -21,7 +22,6 @@ const verifyHost = async (sessionId, userId) => {
 
 // POST /api/rag/upload — Host only
 export const uploadDocument = async (req, res, next) => {
-  const uploadedFilePath = req.file?.path;
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -42,7 +42,12 @@ export const uploadDocument = async (req, res, next) => {
     // Verify host
     const hostCheck = await verifyHost(sessionId, req.user.userId);
     if (!hostCheck.valid) {
-      fs.unlinkSync(uploadedFilePath);
+      // Delete from Cloudinary if host check fails
+      if (req.file.filename) {
+        await cloudinary.uploader.destroy(req.file.filename, {
+          resource_type: 'raw'
+        });
+      }
       return res.status(403).json({
         success: false,
         error: hostCheck.error
@@ -54,6 +59,11 @@ export const uploadDocument = async (req, res, next) => {
       .replace('.', '')
       .toLowerCase();
 
+    // Cloudinary se file download karke RAG process karo
+    const cloudinaryUrl = req.file.path;
+    const publicId = req.file.filename;
+
+    // Document create karo MongoDB mein
     const document = await Document.create({
       title: title || req.file.originalname,
       originalName: req.file.originalname,
@@ -61,10 +71,19 @@ export const uploadDocument = async (req, res, next) => {
       fileSize: req.file.size,
       uploadedBy: req.user.userId,
       sessionId,
+      fileUrl: cloudinaryUrl,           // ← Cloudinary URL
+      cloudinaryPublicId: publicId,     // ← Public ID
     });
 
+    // RAG processing ke liye temp file download karo
+    const tempPath = `/tmp/${Date.now()}-${req.file.originalname}`;
+    const response = await fetch(cloudinaryUrl);
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(tempPath, Buffer.from(buffer));
+
+    // RAG process karo
     const { chunkCount, vectorIds } = await processAndStoreDocument(
-      uploadedFilePath,
+      tempPath,
       fileType,
       document._id,
       {
@@ -74,12 +93,16 @@ export const uploadDocument = async (req, res, next) => {
       }
     );
 
+    // Temp file delete karo
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath);
+    }
+
+    // Document update karo
     document.isProcessed = true;
     document.chunkCount = chunkCount;
     document.vectorIds = vectorIds;
     await document.save();
-
-    fs.unlinkSync(uploadedFilePath);
 
     res.status(201).json({
       success: true,
@@ -90,13 +113,11 @@ export const uploadDocument = async (req, res, next) => {
         fileType: document.fileType,
         chunkCount: document.chunkCount,
         isProcessed: document.isProcessed,
+        fileUrl: document.fileUrl,      // ← Return URL
         createdAt: document.createdAt,
       },
     });
   } catch (error) {
-    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
-      fs.unlinkSync(uploadedFilePath);
-    }
     next(error);
   }
 };
@@ -192,7 +213,17 @@ export const deleteDocument = async (req, res, next) => {
       });
     }
 
+    // Cloudinary se delete karo
+    if (document.cloudinaryPublicId) {
+      await cloudinary.uploader.destroy(document.cloudinaryPublicId, {
+        resource_type: 'raw'
+      });
+    }
+
+    // Qdrant se vectors delete karo
     await deleteDocumentVectors(document.vectorIds);
+
+    // MongoDB se delete karo
     await document.deleteOne();
 
     res.status(200).json({

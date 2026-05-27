@@ -46,6 +46,14 @@ const documentSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    fileUrl: {
+      type: String,    // ← NEW — Cloudinary URL
+      default: null,
+    },
+    cloudinaryPublicId: {
+      type: String,    // ← NEW — delete ke liye
+      default: null,
+    },
   },
   { timestamps: true }
 );

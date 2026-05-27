@@ -1,21 +1,22 @@
 import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import cloudinary from '../config/cloudinary.js';
 import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => {
+    const fileType = path
+      .extname(file.originalname)
+      .replace('.', '')
+      .toLowerCase();
 
-const uploadDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`;
-    cb(null, uniqueName);
+    return {
+      folder: 'intellimeet_docs',
+      resource_type: 'raw',        // PDF ke liye raw chahiye
+      format: fileType,
+      public_id: `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`,
+    };
   },
 });
 
