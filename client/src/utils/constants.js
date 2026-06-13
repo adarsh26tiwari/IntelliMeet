@@ -15,10 +15,16 @@ export const API_ENDPOINTS = {
     JOIN: '/session/join',
     END: '/session/end',
     LEAVE: '/session/leave',
-    GET: '/session', // Base path, append roomId
+    GET: '/session',
     LIST: '/session/list',
   },
-  // ZEGO token generation moved to frontend - no backend endpoint needed
+  RAG: {
+  UPLOAD: '/rag/upload',
+  ASK: '/rag/ask',
+  DOCUMENTS: '/rag/documents',
+  DELETE: '/rag/documents',
+  DOWNLOAD: '/rag/download',   // ← NEW
+},
 };
 
 export const ROUTES = {

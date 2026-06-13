@@ -1,27 +1,32 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
+import { CohereClient } from 'cohere-ai';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import mammoth from 'mammoth';
 import fs from 'fs';
 import { createRequire } from 'module';
+
 const require = createRequire(import.meta.url);
 const pdfParseModule = require('pdf-parse/lib/pdf-parse.js');
 const pdfParse = pdfParseModule.default || pdfParseModule;
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// ── Clients ──────────────────────────────────────────────────
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const cohere = new CohereClient({ token: process.env.COHERE_API_KEY });
 const qdrant = new QdrantClient({
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
 });
 
-
-
-const COLLECTION_NAME = 'intellimeet_docs';
+// ── Config ───────────────────────────────────────────────────
+const COLLECTION_NAME = 'intellimeet_docs_v2'; // v2 — Gemini vectors incompatible the
 const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 50;
-const VECTOR_SIZE = 3072;
+const VECTOR_SIZE = 1024; // Cohere embed-english-v3.0 output
+const EMBED_MODEL = 'embed-english-v3.0';
+const CHAT_MODEL = 'llama-3.1-8b-instant';
 
 // ── Collection setup ─────────────────────────────────────────
 const ensureCollection = async () => {
@@ -29,14 +34,10 @@ const ensureCollection = async () => {
     await qdrant.getCollection(COLLECTION_NAME);
   } catch {
     await qdrant.createCollection(COLLECTION_NAME, {
-      vectors: {
-        size: VECTOR_SIZE,
-        distance: 'Cosine',
-      },
+      vectors: { size: VECTOR_SIZE, distance: 'Cosine' },
     });
+    console.log(`✅ Qdrant collection '${COLLECTION_NAME}' created`);
   }
-
-  // Index banana zaroori hai filtering ke liye
   try {
     await qdrant.createPayloadIndex(COLLECTION_NAME, {
       field_name: 'sessionId',
@@ -47,7 +48,7 @@ const ensureCollection = async () => {
       field_schema: 'keyword',
     });
   } catch {
-    // Index already exists — ignore
+    // already exists — ignore
   }
 };
 
@@ -79,28 +80,33 @@ const chunkText = (text) => {
   return chunks;
 };
 
-// ── Embeddings ───────────────────────────────────────────────
-// Isse
-const getEmbedding = async (text) => {
-  const response = await ai.models.embedContent({
-    model: 'gemini-embedding-001',
-    contents: text,
+// ── Embeddings (Cohere batch) ────────────────────────────────
+const getBatchEmbeddings = async (texts) => {
+  const response = await cohere.embed({
+    texts,
+    model: EMBED_MODEL,
+    inputType: 'search_document',
+    embeddingTypes: ['float'],
   });
-  return response.embeddings[0].values;
+  return response.embeddings.float;
 };
 
-const getBatchEmbeddings = async (texts) => {
-  const embeddings = [];
-  for (const text of texts) {
-    const embedding = await getEmbedding(text);
-    embeddings.push(embedding);
-  }
-  return embeddings;
+const getQueryEmbedding = async (query) => {
+  const response = await cohere.embed({
+    texts: [query],
+    model: EMBED_MODEL,
+    inputType: 'search_query',
+    embeddingTypes: ['float'],
+  });
+  return response.embeddings.float[0];
 };
 
 // ── Process & Store Document ─────────────────────────────────
 export const processAndStoreDocument = async (
-  filePath, fileType, documentId, metadata = {}
+  filePath,
+  fileType,
+  documentId,
+  metadata = {}
 ) => {
   await ensureCollection();
 
@@ -110,10 +116,14 @@ export const processAndStoreDocument = async (
   }
 
   const chunks = chunkText(rawText);
-  const embeddings = await getBatchEmbeddings(chunks);
+  console.log(`📄 ${chunks.length} chunks extracted`);
 
+  const embeddings = await getBatchEmbeddings(chunks);
+  console.log(`✅ ${embeddings.length} embeddings generated via Cohere`);
+
+  const baseId = Date.now();
   const points = chunks.map((text, i) => ({
-    id: i + Date.now(),
+    id: baseId + i,
     vector: embeddings[i],
     payload: {
       documentId: documentId.toString(),
@@ -127,6 +137,7 @@ export const processAndStoreDocument = async (
   }));
 
   await qdrant.upsert(COLLECTION_NAME, { points });
+  console.log(`✅ ${points.length} vectors stored in Qdrant`);
 
   const vectorIds = points.map((p) => p.id.toString());
   return { chunkCount: chunks.length, vectorIds };
@@ -136,7 +147,7 @@ export const processAndStoreDocument = async (
 export const searchDocuments = async (query, filters = {}, topK = 5) => {
   await ensureCollection();
 
-  const queryEmbedding = await getEmbedding(query);
+  const queryEmbedding = await getQueryEmbedding(query);
 
   const mustConditions = [];
   if (filters.sessionId) {
@@ -152,16 +163,14 @@ export const searchDocuments = async (query, filters = {}, topK = 5) => {
     });
   }
 
-  const searchParams = {
+  const results = await qdrant.search(COLLECTION_NAME, {
     vector: queryEmbedding,
     limit: topK,
     with_payload: true,
     ...(mustConditions.length > 0 && {
       filter: { must: mustConditions },
     }),
-  };
-
-  const results = await qdrant.search(COLLECTION_NAME, searchParams);
+  });
 
   return results.map((r) => ({
     text: r.payload.text,
@@ -170,36 +179,38 @@ export const searchDocuments = async (query, filters = {}, topK = 5) => {
   }));
 };
 
-// ── Generate Answer ──────────────────────────────────────────
+// ── Generate Answer (Groq Llama 3.1) ────────────────────────
 export const generateAnswer = async (query, contextChunks) => {
   const context = contextChunks
     .map((c, i) => `[${i + 1}] ${c.text}`)
     .join('\n\n');
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `You are a helpful teaching assistant for IntelliMeet.
+  const completion = await groq.chat.completions.create({
+    model: CHAT_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: `You are a helpful teaching assistant for IntelliMeet — a smart video meeting platform.
 Answer using ONLY the provided document context.
-If answer not in context, say "I couldn't find this in the uploaded materials."
-Be concise and clear.
-
-Context:
-${context}
-
-Question: ${query}
-
-Answer:`,
+If the answer is not in the context, say: "I couldn't find this in the uploaded materials."
+Be concise and clear. Use bullet points for lists.`,
+      },
+      {
+        role: 'user',
+        content: `Document context:\n\n${context}\n\nQuestion: ${query}\n\nAnswer:`,
+      },
+    ],
+    temperature: 0.3,
+    max_tokens: 512,
   });
 
-  return response.text;
+  return completion.choices[0].message.content;
 };
 
 // ── Delete Document Vectors ──────────────────────────────────
 export const deleteDocumentVectors = async (vectorIds) => {
   if (!vectorIds || vectorIds.length === 0) return;
-
   const ids = vectorIds.map((id) => parseInt(id));
-  await qdrant.delete(COLLECTION_NAME, {
-    points: ids,
-  });
+  await qdrant.delete(COLLECTION_NAME, { points: ids });
+  console.log(`🗑️ ${ids.length} vectors deleted`);
 };

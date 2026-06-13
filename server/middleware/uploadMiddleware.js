@@ -1,22 +1,21 @@
 import multer from 'multer';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import cloudinary from '../config/cloudinary.js';
 import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-    const fileType = path
-      .extname(file.originalname)
-      .replace('.', '')
-      .toLowerCase();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-    return {
-      folder: 'intellimeet_docs',
-      resource_type: 'raw',        // PDF ke liye raw chahiye
-      format: fileType,
-      public_id: `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`,
-    };
+const uploadDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const sanitized = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${sanitized}`);
   },
 });
 
@@ -36,7 +35,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 export default upload;
