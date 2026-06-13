@@ -2,7 +2,6 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
-import mongoSanitize from 'express-mongo-sanitize';
 import rateLimit from 'express-rate-limit';
 import connectDb from './config/database.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -46,7 +45,25 @@ app.use(express.urlencoded({ extended: true }));
 // ── Security 3: MongoDB sanitization ─────────────────────────
 // Strips MongoDB operators ($where, $gt, etc.) from user input.
 // Prevents NoSQL injection attacks.
-app.use(mongoSanitize());
+app.use((req, res, next) => {
+    const sanitize = (obj) => {
+        if (obj && typeof obj === 'object') {
+            for (const key in obj) {
+                if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                    if (key.startsWith('$') || key.includes('.')) {
+                        delete obj[key];
+                    } else {
+                        sanitize(obj[key]);
+                    }
+                }
+            }
+        }
+    };
+    sanitize(req.body);
+    sanitize(req.query);
+    sanitize(req.params);
+    next();
+});
 
 // ── Feature 2: Rate Limiting ──────────────────────────────────
 

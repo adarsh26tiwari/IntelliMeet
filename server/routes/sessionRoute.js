@@ -2,6 +2,7 @@ import express from 'express';
 import {body,validationResult} from 'express-validator'
 import { getSession,createSession,leaveSession,endSession,JoinSession,listSession} from '../controllers/sessionControllers.js';
 import { protect } from '../middleware/auth.js';
+import sessionGuard from '../middleware/sessionGuard.js';
 
 
 const router = express.Router();
@@ -46,9 +47,10 @@ router.post(
 )
 
 
-//GET /api/session/:roomId
-
 router.get('/:roomId',getSession)
+
+// GET /api/session/:sessionId/review - requires auth + session membership
+router.get('/:sessionId/review', protect, sessionGuard, getSession)
 
 
 

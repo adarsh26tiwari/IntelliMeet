@@ -34,6 +34,7 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   HOST: '/host',
   JOIN: '/join',
+  REVIEW: '/session/:sessionId/review',
 };
 
 export const ZEGO_CONFIG = {

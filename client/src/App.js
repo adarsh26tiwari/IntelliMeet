@@ -11,6 +11,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import HostSession from './pages/HostSession';
 import JoinSession from './pages/JoinSession';
+import ReviewSession from './pages/ReviewSession';
 import { SessionProvider } from './context/sessionContext';
 import { Toaster } from 'react-hot-toast';
 
@@ -88,6 +89,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Layout><JoinSession /></Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path={ROUTES.REVIEW}
+                  element={
+                    <ProtectedRoute>
+                      <Layout><ReviewSession /></Layout>
                     </ProtectedRoute>
                   }
                 />

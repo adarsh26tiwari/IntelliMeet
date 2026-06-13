@@ -9,7 +9,7 @@ import api from "../service/api";
 import toast from "react-hot-toast";
 import {
   FaSpinner, FaUpload, FaRobot, FaFileAlt, FaTrash,
-  FaTimes, FaUsers, FaCopy, FaLink, FaExternalLinkAlt,
+  FaTimes, FaExternalLinkAlt,
 } from "react-icons/fa";
 import SessionHeader from "../components/session/SessionHeader";
 import SessionInfoCard from "../components/session/SessionInfoCard";
@@ -18,8 +18,7 @@ import ParticipantsList from "../components/session/ParticipantsList";
 
 const TABS = [
   { id: "participants", label: "People", icon: "👥" },
-  { id: "askAI", label: "Ask AI", icon: "🤖" },
-  { id: "documents", label: "Docs", icon: "📄" },
+  { id: "docs_and_ai", label: "Docs & AI", icon: "📄" },
 ];
 
 const HostSession = () => {
@@ -33,6 +32,7 @@ const HostSession = () => {
   const [askLoading, setAskLoading] = useState(false);
   const [askAnswer, setAskAnswer] = useState(null);
   const [viewingDoc, setViewingDoc] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const fileInputRef = useRef(null);
 
   const { currentSession, getSession, clearSession } = useSession();
@@ -191,6 +191,13 @@ const HostSession = () => {
   const handleEndSession = async () => {
     if (!sessionInfo?.isHost) return;
     try {
+      if (document.fullscreenElement) {
+        try {
+          await document.exitFullscreen();
+        } catch (fErr) {
+          console.error("Fullscreen exit error", fErr);
+        }
+      }
       if (zegoJoinedRef.current) { await leaveZegoRoom(); zegoJoinedRef.current = false; }
       await api.post(`${API_ENDPOINTS.SESSION.END}/${sessionInfo.id}`);
       clearSession();
@@ -203,6 +210,13 @@ const HostSession = () => {
 
   const handleLeave = async () => {
     if (sessionInfo?.isHost) { handleEndSession(); return; }
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch (fErr) {
+        console.error("Fullscreen exit error", fErr);
+      }
+    }
     if (zegoJoinedRef.current) { await leaveZegoRoom(); zegoJoinedRef.current = false; }
     await api.post(API_ENDPOINTS.SESSION.LEAVE, { roomId });
     clearSession();
@@ -210,17 +224,16 @@ const HostSession = () => {
   };
 
   const openDocument = (doc) => {
-    // Backend proxy se serve karo — proper PDF headers milenge
     const url = `${process.env.REACT_APP_API_URL}/rag/download/${doc._id}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0F0F13]">
         <div className="text-center">
           <FaSpinner className="animate-spin h-12 w-12 text-blue-600 mx-auto" />
-          <p className="mt-4 text-gray-600">{APP_CONFIG.LOADING_MESSAGES.SESSION}</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">{APP_CONFIG.LOADING_MESSAGES.SESSION}</p>
         </div>
       </div>
     );
@@ -229,12 +242,12 @@ const HostSession = () => {
   if (!sessionInfo) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0F0F13]">
       <SessionHeader
         title={APP_CONFIG.SESSION_CONTENT.HEADER.HOSTING_TITLE}
         roomId={roomId}
         userName={user?.name}
-        onBack={() => navigate(ROUTES.DASHBOARD)}
+        onBack={handleLeave}
         showEndBUtton={sessionInfo.isHost}
         onEndSession={handleEndSession}
       />
@@ -243,7 +256,7 @@ const HostSession = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* ── Left column ── */}
-          <div className="lg:col-span-2 space-y-5">
+          <div className={`${isSidebarOpen ? "lg:col-span-2" : "lg:col-span-3"} space-y-5 transition-all duration-300`}>
             <SessionInfoCard
               roomId={roomId}
               shareableLink={getShareableLink()}
@@ -262,6 +275,8 @@ const HostSession = () => {
               zegoLoading={zegoLoading}
               onFullscreen={handleFullScreen}
               onLeave={handleLeave}
+              isSidebarOpen={isSidebarOpen}
+              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
               leaveButtonText={
                 sessionInfo?.isHost
                   ? APP_CONFIG.SESSION_CONTENT.VIDEO.END_BUTTON
@@ -271,14 +286,14 @@ const HostSession = () => {
 
             {/* Upload area — host only */}
             {sessionInfo.isHost && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="bg-white dark:bg-[#1A1A24] rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-5 transition-colors duration-300">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm">
+                  <h3 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2 text-sm">
                     <FaUpload className="text-blue-500" />
                     Upload Study Material
                   </h3>
                   {uploading && (
-                    <span className="flex items-center gap-1 text-xs text-blue-600">
+                    <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                       <FaSpinner className="animate-spin" /> Processing...
                     </span>
                   )}
@@ -295,177 +310,183 @@ const HostSession = () => {
                   htmlFor="file-upload"
                   className={`flex items-center justify-center gap-2 w-full py-4 px-4 border-2 border-dashed rounded-xl cursor-pointer transition-all text-sm font-medium
                     ${uploading
-                      ? "border-blue-200 bg-blue-50 text-blue-400 cursor-not-allowed"
-                      : "border-blue-300 text-blue-600 hover:border-blue-500 hover:bg-blue-50"
+                      ? "border-blue-200 bg-blue-50 text-blue-400 cursor-not-allowed dark:border-blue-900 dark:bg-blue-950/20"
+                      : "border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/10"
                     }`}
                 >
                   <FaUpload />
                   {uploading ? "Uploading & indexing..." : "Click to upload PDF, TXT, or DOCX"}
                 </label>
-                <p className="text-xs text-gray-400 mt-2 text-center">Max 10MB · Processed by AI for Q&A</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">Max 10MB · Processed by AI for Q&A</p>
               </div>
             )}
           </div>
 
-          {/* ── Right column ── */}
-          <div className="lg:col-span-1 space-y-4">
+          {/* ── Right column (Sidebar) ── */}
+          {isSidebarOpen && (
+            <div className="lg:col-span-1 space-y-4">
 
-            {/* Tab bar */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-1 flex gap-1">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 py-2 px-1 rounded-xl text-xs font-medium transition-all ${
-                    activeTab === tab.id
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-gray-500 hover:bg-gray-50"
-                  }`}
-                >
-                  {tab.icon} {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Participants */}
-            {activeTab === "participants" && (
-              <ParticipantsList
-                participants={sessionInfo.participants}
-                hostName={sessionInfo.hostName}
-              />
-            )}
-
-            {/* Ask AI */}
-            {activeTab === "askAI" && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <FaRobot className="text-purple-600 text-sm" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-800 text-sm">Ask AI</h3>
-                    <p className="text-xs text-gray-400">Powered by Groq · Llama 3.1</p>
-                  </div>
-                </div>
-
-                <form onSubmit={handleAskAI} className="space-y-3">
-                  <textarea
-                    value={askQuery}
-                    onChange={(e) => setAskQuery(e.target.value)}
-                    placeholder="Ask anything about uploaded documents..."
-                    className="w-full p-3 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none transition-all"
-                    rows={3}
-                  />
+              {/* Tab bar */}
+              <div className="bg-white dark:bg-[#1A1A24] rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-1 flex gap-1 transition-colors duration-300">
+                {TABS.map((tab) => (
                   <button
-                    type="submit"
-                    disabled={askLoading || !askQuery.trim()}
-                    className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2"
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 py-2 px-1 rounded-xl text-xs font-medium transition-all ${
+                      activeTab === tab.id
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    }`}
                   >
-                    {askLoading ? (
-                      <><FaSpinner className="animate-spin" /> Thinking...</>
-                    ) : (
-                      <><FaRobot /> Ask AI</>
-                    )}
+                    {tab.icon} {tab.label}
                   </button>
-                </form>
+                ))}
+              </div>
 
-                {askAnswer && (
-                  <div className="space-y-3">
-                    <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
-                      <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-                        {askAnswer.answer}
-                      </p>
+              {/* Participants Tab */}
+              {activeTab === "participants" && (
+                <ParticipantsList
+                  participants={sessionInfo.participants}
+                  hostName={sessionInfo.hostName}
+                />
+              )}
+
+              {/* Consolidated Docs & AI Tab */}
+              {activeTab === "docs_and_ai" && (
+                <div className="space-y-4">
+                  {/* Documents section */}
+                  <div className="bg-white dark:bg-[#1A1A24] rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 space-y-3 transition-colors duration-300">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-gray-800 dark:text-white text-sm flex items-center gap-2">
+                        <FaFileAlt className="text-green-500" />
+                        Session Documents
+                      </h3>
+                      <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                        {documents.length}
+                      </span>
                     </div>
-                    {askAnswer.sources?.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Sources</p>
-                        {askAnswer.sources.map((src, i) => (
-                          <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                            <p className="text-xs font-medium text-gray-700 truncate">{src.title}</p>
-                            <span className="text-xs text-gray-400 ml-2 shrink-0">
-                              {(src.relevanceScore * 100).toFixed(0)}%
-                            </span>
+
+                    {documents.length === 0 ? (
+                      <div className="text-center py-6">
+                        <FaFileAlt className="text-gray-300 dark:text-gray-700 text-3xl mx-auto mb-2" />
+                        <p className="text-sm text-gray-400">No documents yet</p>
+                        {sessionInfo.isHost && (
+                          <p className="text-xs text-gray-400 mt-1">Upload materials using the panel on the left</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {documents.map((doc) => (
+                          <div
+                            key={doc._id}
+                            className="group flex items-start gap-3 bg-gray-50 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl p-3 transition-all"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center shrink-0 mt-0.5">
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                                {doc.fileType.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{doc.title}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Uploaded by: {doc.uploadedBy?.name || "Host"}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Time: {new Date(doc.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {doc.fileUrl && (
+                                <button
+                                  onClick={() => openDocument(doc)}
+                                  className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/45 transition-all"
+                                  title="Open document"
+                                >
+                                  <FaExternalLinkAlt size={11} />
+                                </button>
+                              )}
+                              {sessionInfo.isHost && (
+                                <button
+                                  onClick={() => handleDeleteDocument(doc._id)}
+                                  className="p-1.5 rounded-lg text-red-400 hover:bg-red-100 dark:hover:bg-red-900/45 transition-all"
+                                  title="Delete"
+                                >
+                                  <FaTrash size={11} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
-                    <button
-                      onClick={() => { setAskAnswer(null); setAskQuery(""); }}
-                      className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
-                    >
-                      <FaTimes size={10} /> Clear
-                    </button>
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* Documents */}
-            {activeTab === "documents" && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
-                    <FaFileAlt className="text-green-500" />
-                    Documents
-                  </h3>
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                    {documents.length}
-                  </span>
-                </div>
+                  {/* Ask AI Section */}
+                  <div className="bg-white dark:bg-[#1A1A24] rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 space-y-4 transition-colors duration-300">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                        <FaRobot className="text-purple-600 dark:text-purple-400 text-sm" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-800 dark:text-white text-sm">Ask AI</h3>
+                        <p className="text-xs text-gray-400">Powered by Groq · Llama 3.1</p>
+                      </div>
+                    </div>
 
-                {documents.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FaFileAlt className="text-gray-300 text-3xl mx-auto mb-2" />
-                    <p className="text-sm text-gray-400">No documents yet</p>
-                    {sessionInfo.isHost && (
-                      <p className="text-xs text-gray-300 mt-1">Upload materials using the panel on the left</p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {documents.map((doc) => (
-                      <div
-                        key={doc._id}
-                        className="group flex items-start gap-3 bg-gray-50 hover:bg-gray-100 rounded-xl p-3 transition-all"
+                    <form onSubmit={handleAskAI} className="space-y-3">
+                      <textarea
+                        value={askQuery}
+                        onChange={(e) => setAskQuery(e.target.value)}
+                        placeholder="Ask anything about uploaded documents..."
+                        className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl text-sm resize-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 bg-white dark:bg-[#22222E] text-gray-900 dark:text-white outline-none transition-all"
+                        rows={3}
+                      />
+                      <button
+                        type="submit"
+                        disabled={askLoading || !askQuery.trim()}
+                        className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center shrink-0 mt-0.5">
-                          <span className="text-xs font-bold text-gray-500">
-                            {doc.fileType.toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{doc.title}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {doc.chunkCount} chunks indexed
+                        {askLoading ? (
+                          <><FaSpinner className="animate-spin" /> Thinking...</>
+                        ) : (
+                          <><FaRobot /> Ask AI</>
+                        )}
+                      </button>
+                    </form>
+
+                    {askAnswer && (
+                      <div className="space-y-3">
+                        <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-900/30 rounded-xl p-3">
+                          <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
+                            {askAnswer.answer}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {doc.fileUrl && (
-                            <button
-                              onClick={() => openDocument(doc)}
-                              className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-100 transition-all"
-                              title="Open document"
-                            >
-                              <FaExternalLinkAlt size={11} />
-                            </button>
-                          )}
-                          {sessionInfo.isHost && (
-                            <button
-                              onClick={() => handleDeleteDocument(doc._id)}
-                              className="p-1.5 rounded-lg text-red-400 hover:bg-red-100 transition-all"
-                              title="Delete"
-                            >
-                              <FaTrash size={11} />
-                            </button>
-                          )}
-                        </div>
+                        {askAnswer.sources?.length > 0 && (
+                          <div className="space-y-1.5">
+                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Sources</p>
+                            {askAnswer.sources.map((src, i) => (
+                              <div key={i} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                                <p className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{src.title}</p>
+                                <span className="text-xs text-gray-400 ml-2 shrink-0">
+                                  {(src.relevanceScore * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => { setAskAnswer(null); setAskQuery(""); }}
+                          className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                        >
+                          <FaTimes size={10} /> Clear
+                        </button>
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>

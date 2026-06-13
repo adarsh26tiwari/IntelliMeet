@@ -3,6 +3,7 @@ import { APP_CONFIG } from '../../utils/constants';
 import { FaCircle, FaExternalLinkAlt } from 'react-icons/fa';
 import { formatDate } from '../../utils/helpers';
 import { SessionCardSkeleton } from '../SkeletonLoader';
+import { useNavigate } from 'react-router-dom';
 
 const StatusBadge = ({ status }) => {
   if (status === 'active') {
@@ -31,6 +32,7 @@ const StatusBadge = ({ status }) => {
 };
 
 const SessionList = ({ sessions, loading, statusFilter, onFilterChange, onRejoinSession }) => {
+  const navigate = useNavigate();
   return (
     <div
       className="mt-12 max-w-4xl mx-auto rounded-2xl p-6 im-card theme-transition"
@@ -120,38 +122,50 @@ const SessionList = ({ sessions, loading, statusFilter, onFilterChange, onRejoin
                 </div>
               </div>
 
-              {/* Rejoin button */}
-              <button
-                onClick={() => onRejoinSession(s)}
-                disabled={s.status !== 'active'}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold theme-transition"
-                style={{
-                  background: s.status === 'active' ? 'var(--color-accent)' : 'var(--color-surface-2)',
-                  color: s.status === 'active' ? '#fff' : 'var(--color-text-2)',
-                  cursor: s.status !== 'active' ? 'not-allowed' : 'pointer',
-                  opacity: s.status !== 'active' ? 0.6 : 1,
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  if (s.status === 'active') {
+              {/* Action button */}
+              {s.status === 'active' ? (
+                <button
+                  onClick={() => onRejoinSession(s)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold theme-transition text-white"
+                  style={{
+                    background: 'var(--color-accent)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-1px)';
                     e.currentTarget.style.boxShadow = '0 4px 12px rgba(108,99,255,0.4)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'none';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                {s.status === 'active' ? (
-                  <>
-                    {APP_CONFIG.DASHBOARD_CONTENT.SESSIONS_LIST.REJOIN_BUTTON}
-                    <FaExternalLinkAlt className="w-3 h-3" />
-                  </>
-                ) : (
-                  APP_CONFIG.DASHBOARD_CONTENT.SESSIONS_LIST.ENDED_BUTTON
-                )}
-              </button>
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  {APP_CONFIG.DASHBOARD_CONTENT.SESSIONS_LIST.REJOIN_BUTTON}
+                  <FaExternalLinkAlt className="w-3 h-3" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate(`/session/${s.id}/review`)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold theme-transition border border-gray-300 dark:border-gray-700"
+                  style={{
+                    background: 'var(--color-surface-2)',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = 'var(--shadow-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  Review Session
+                </button>
+              )}
             </div>
           ))}
         </div>

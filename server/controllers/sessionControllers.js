@@ -189,11 +189,18 @@ export const getSession = async (req, res, next) => {
     const { roomId } = req.params;
     const userId = req.user.userId;
 
-    const session = await Session.findOne({ roomId });
+    let session;
+    // Check if roomId is a valid MongoDB ObjectId (24 hex characters)
+    if (roomId && roomId.match(/^[0-9a-fA-F]{24}$/)) {
+      session = await Session.findById(roomId);
+    } else {
+      session = await Session.findOne({ roomId });
+    }
+
     if (!session) {
       return res.status(404).json({
         success: false,
-        error: "Session not found. Please check the roomId",
+        error: "Session not found. Please check the ID",
       });
     }
 
@@ -214,6 +221,8 @@ export const getSession = async (req, res, next) => {
           isHost: session.host.toString() === userId.toString(),
           isParticipant,
           participants: session.participants,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
         },
       },
     });
