@@ -6,6 +6,8 @@ import {
   searchDocuments,
   generateAnswer,
   deleteDocumentVectors,
+  getSessionHistory,
+  appendToHistory,
 } from '../services/ragService.js';
 import fs from 'fs';
 import path from 'path';
@@ -57,7 +59,7 @@ export const uploadDocument = async (req, res, next) => {
       sessionId,
     });
 
-    // RAG processing
+    // RAG processing — chunk, embed, store in Qdrant
     const { chunkCount, vectorIds } = await processAndStoreDocument(
       localFilePath,
       fileType,
@@ -65,9 +67,7 @@ export const uploadDocument = async (req, res, next) => {
       { uploadedBy: req.user.userId, sessionId, title: document.title }
     );
 
-    // ── Cloudinary upload — FIXED ────────────────────────────
-    // resource_type 'raw' — PDF/DOCX/TXT sab ke liye sahi hai
-    // 'image' sirf images ke liye hota hai — yahi bug tha
+    // Cloudinary upload — resource_type 'raw' for PDF/DOCX/TXT
     const cloudinaryResult = await cloudinary.uploader.upload(localFilePath, {
       folder: 'intellimeet_docs',
       resource_type: 'raw',
@@ -81,7 +81,7 @@ export const uploadDocument = async (req, res, next) => {
     // Local file cleanup
     if (localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
 
-    // Document update
+    // Document update with Cloudinary URL and vector IDs
     document.isProcessed = true;
     document.chunkCount = chunkCount;
     document.vectorIds = vectorIds;
@@ -96,6 +96,7 @@ export const uploadDocument = async (req, res, next) => {
         _id: document._id,
         title: document.title,
         fileType: document.fileType,
+        fileSize: document.fileSize,
         chunkCount: document.chunkCount,
         isProcessed: document.isProcessed,
         fileUrl: document.fileUrl,
@@ -109,8 +110,8 @@ export const uploadDocument = async (req, res, next) => {
 };
 
 // ── GET /api/rag/download/:id — PDF proxy server ────────────
-// Cloudinary URL redirect karne ki bajaye, server khud file fetch karke serve karega
-// Isse browser ko proper PDF headers milenge aur koi CORS/redirect issue nahi hoga
+// Server fetches from Cloudinary and serves with proper PDF headers
+// This avoids browser CORS/redirect issues with raw Cloudinary URLs
 export const downloadDocument = async (req, res, next) => {
   try {
     const document = await Document.findById(req.params.id);
@@ -121,7 +122,6 @@ export const downloadDocument = async (req, res, next) => {
     if (!document.fileUrl)
       return res.status(404).json({ success: false, error: 'File URL not found' });
 
-    // Cloudinary se file fetch karo
     const axios = (await import('axios')).default;
     const response = await axios.get(document.fileUrl, {
       responseType: 'arraybuffer',
@@ -143,7 +143,8 @@ export const downloadDocument = async (req, res, next) => {
   }
 };
 
-// ── POST /api/rag/ask ────────────────────────────────────────
+// ── POST /api/rag/ask ─────────────────────────────────────────
+// Feature 4: Reads session history, passes to generateAnswer, then appends to history
 export const askQuestion = async (req, res, next) => {
   try {
     const { query, sessionId, documentId } = req.body;
@@ -169,7 +170,15 @@ export const askQuestion = async (req, res, next) => {
       });
     }
 
-    const answer = await generateAnswer(query, contextChunks);
+    // Feature 4: Retrieve conversation history for this session for multi-turn context
+    const conversationHistory = sessionId ? getSessionHistory(sessionId) : [];
+
+    const answer = await generateAnswer(query, contextChunks, conversationHistory);
+
+    // Feature 4: Persist this Q&A pair into the session's conversation history
+    if (sessionId) {
+      appendToHistory(sessionId, query, answer);
+    }
 
     res.status(200).json({
       success: true,
@@ -219,7 +228,7 @@ export const deleteDocument = async (req, res, next) => {
 
     if (document.cloudinaryPublicId) {
       await cloudinary.uploader.destroy(document.cloudinaryPublicId, {
-        resource_type: 'raw', // ✅ FIX: delete bhi 'raw' type se hoga
+        resource_type: 'raw',
       });
     }
 
