@@ -27,7 +27,8 @@ const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 50;
 const VECTOR_SIZE = 1024; // Cohere embed-english-v3.0 output dimensions
 const EMBED_MODEL = 'embed-english-v3.0';
-const CHAT_MODEL = 'llama-3.1-8b-instant';
+const CHAT_MODEL = 'llama-3.3-70b-versatile';
+
 
 /**
  * Feature 4: In-memory conversation history store.
